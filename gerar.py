@@ -242,20 +242,55 @@ def monta():
     return fichas, "".join(looks), "".join(cards), filtros_tipo, filtros_fam
 
 
+def destaques(fichas):
+    """As seis aulas pagas como receitas em destaque, para o modelo de revista."""
+    out = []
+    for i, (pid, _o, _r, _c, _l) in enumerate(LOOKS):
+        f = fichas[pid]
+        desc = f'<p class="r-desc">{e(f["desc"])}</p>' if f["desc"] else ""
+        out.append(
+            f'<article class="receita {"r-g" if i % 3 == 0 else "r-p"}">'
+            f'<a class="r-foto" href="{e(f["acoes"][0]["u"])}" target="_blank" rel="noopener" data-ficha="{pid}">'
+            f'<img src="looks/{pid}.jpg" alt="{e(f["nome"])}" loading="lazy"></a>'
+            f'<div class="r-texto"><h3>{e(f["nome"])}</h3>{desc}'
+            f'<dl class="r-ficha"><div><dt>Tipo</dt><dd>Aula completa</dd></div>'
+            f'<div><dt>Categoria</dt><dd>{e(f["familia"])}</dd></div>'
+            f'<div><dt>Onde</dt><dd>Kiwify</dd></div></dl>'
+            f'<p class="r-acoes"><a class="botao" href="{e(f["acoes"][0]["u"])}" target="_blank" rel="noopener">Comprar a aula</a>'
+            f'<a class="elo" href="#sumario" data-ficha="{pid}">Ver a receita</a></p></div></article>')
+    return "".join(out)
+
+
+def grava(modelo_nome, pasta, prefixo, partes):
+    modelo = open(os.path.join(RAIZ, modelo_nome), encoding="utf-8").read()
+    pagina = modelo
+    for chave, valor in partes.items():
+        pagina = pagina.replace("{{" + chave + "}}", valor)
+    assert "{{" not in pagina, "sobrou marcador em " + modelo_nome
+    if prefixo:
+        for d in ("fotos/", "looks/", "fonts/"):
+            pagina = pagina.replace('"' + d, '"' + prefixo + d).replace("(\"" + d, "(\"" + prefixo + d)
+    destino = os.path.join(SAIDA, pasta)
+    os.makedirs(destino, exist_ok=True)
+    open(os.path.join(destino, "index.html"), "w", encoding="utf-8").write(pagina)
+
+
 def main():
     fichas, looks, cards, f_tipo, f_fam = monta()
-    modelo = open(os.path.join(RAIZ, "modelo-lookbook.html"), encoding="utf-8").read()
-    pagina = (modelo.replace("{{LOOKS}}", looks).replace("{{PECAS}}", cards)
-              .replace("{{FILTROS_TIPO}}", f_tipo).replace("{{FILTROS_FAM}}", f_fam)
-              .replace("{{TOTAL}}", str(len(PECAS)))
-              .replace("{{FICHAS}}", json.dumps(fichas, ensure_ascii=False).replace("</", "<\\/")))
-    assert "{{" not in pagina, "sobrou marcador no modelo"
+    conta = {t: sum(1 for p in PECAS if p[2] == t) for t in TIPOS}
+    partes = {"LOOKS": looks, "PECAS": cards, "FILTROS_TIPO": f_tipo, "FILTROS_FAM": f_fam,
+              "TOTAL": str(len(PECAS)), "DESTAQUES": destaques(fichas),
+              "N_AULA": str(conta["aula"]), "N_GRATIS": str(conta["gratis"]),
+              "N_TUTORIAL": str(conta["tutorial"]), "N_ENCOMENDA": str(conta["encomenda"]),
+              "FICHAS": json.dumps(fichas, ensure_ascii=False).replace("</", "<\\/")}
     os.makedirs(os.path.join(SAIDA, "fonts"), exist_ok=True)
-    for f in ("BodoniModa-normal.woff2", "BodoniModa-italic.woff2", "HankenGrotesk-normal.woff2"):
-        shutil.copy(os.path.join(RAIZ, "fonts", f), os.path.join(SAIDA, "fonts", f))
-    open(os.path.join(SAIDA, "index.html"), "w", encoding="utf-8").write(pagina)
+    for f in os.listdir(os.path.join(RAIZ, "fonts")):
+        if f != "Outfit-normal.woff2":
+            shutil.copy(os.path.join(RAIZ, "fonts", f), os.path.join(SAIDA, "fonts", f))
+    grava("modelo-lookbook.html", "", "", partes)
+    grava("modelo-revista.html", "revista", "../", partes)
     open(os.path.join(SAIDA, ".nojekyll"), "w").write("")
-    print(len(PECAS), "peças;", {t: sum(1 for p in PECAS if p[2] == t) for t in TIPOS})
+    print(len(PECAS), "peças;", conta)
 
 
 if __name__ == "__main__":
